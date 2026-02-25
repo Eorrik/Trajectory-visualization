@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>书法轨迹可视化应用</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f5f6f8; }
+      .wrap { max-width: 1300px; margin: 0 auto; padding: 20px; }
+      .panel { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 14px; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      label { font-size: 13px; color: #333; display: block; margin-bottom: 4px; }
+      input { width: 100%; padding: 6px 8px; }
+      button { margin-top: 10px; padding: 8px 12px; border: none; border-radius: 6px; background: #1f6feb; color: #fff; cursor: pointer; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+      th { background: #efefef; }
+    </style>
+    <script src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
+    <script src="https://assets.pyecharts.org/assets/v5/echarts-gl.min.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="panel">
+        <h2>书法采集数据可视化（Flask + Pyecharts）</h2>
+        <p>数据时间范围：{{ min_ts }} ~ {{ max_ts }}，当前渲染点数：{{ rows }}</p>
+        <form method="get">
+          <div class="grid">
+            <div>
+              <label>time_start</label>
+              <input type="datetime-local" name="time_start" value="{{ time_start }}" step="1" />
+            </div>
+            <div>
+              <label>time_end</label>
+              <input type="datetime-local" name="time_end" value="{{ time_end }}" step="1" />
+            </div>
+            <div>
+              <label>time_forcing</label>
+              <input type="datetime-local" name="time_forcing" value="{{ time_forcing }}" step="1" />
+            </div>
+            <div>
+              <label>pen_length (m)</label>
+              <input type="number" name="pen_length" value="{{ pen_length }}" step="0.01" />
+            </div>
+            <div>
+              <label>contact_threshold (m)</label>
+              <input type="number" name="contact_threshold" value="{{ contact_threshold }}" step="0.001" />
+            </div>
+          </div>
+          <button type="submit">更新图表</button>
+        </form>
+      </div>
+
+      <div class="panel">{{ chart_html | safe }}</div>
+
+      <div class="panel">
+        <h3>WT1 插值数据预览（前 12 行）</h3>
+        <table>
+          <thead>
+            <tr>
+              {% for key in sample_preview[0].keys() if sample_preview %}
+              <th>{{ key }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in sample_preview %}
+            <tr>
+              {% for value in row.values() %}
+              <td>{{ value }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

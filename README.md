@@ -1,6 +1,6 @@
 # Trajectory Visualization
 
-基于 **Flask + Pyecharts** 的书法轨迹交互可视化应用。
+基于 **Flask + Plotly** 的书法轨迹交互可视化应用。
 
 ## 1. 快速启动
 

@@ -18,13 +18,12 @@
       th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
       th { background: #efefef; }
     </style>
-    <script src="https://assets.pyecharts.org/assets/v5/echarts.min.js"></script>
-    <script src="https://assets.pyecharts.org/assets/v5/echarts-gl.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
     <div class="wrap">
       <div class="panel">
-        <h2>书法采集数据可视化（Flask + Pyecharts）</h2>
+        <h2>书法采集数据可视化（Flask + Plotly）</h2>
         <p>全局时间范围：{{ min_ts }} ~ {{ max_ts }}，当前渲染点数：{{ rows }}</p>
 
         <form method="get" id="controlsForm">
@@ -76,7 +75,7 @@
         </form>
       </div>
 
-      <div class="panel">{{ chart_html | safe }}</div>
+      <div class="panel"><div id="plotly3d" style="width:100%;height:760px;"></div></div>
 
       <div class="panel">
         <h3>WT1 插值数据预览（前 12 行）</h3>
@@ -136,6 +135,10 @@
       }
 
       startRange.addEventListener('input', syncRanges);
+
+      const fig = {{ plotly_figure | tojson }};
+      Plotly.newPlot('plotly3d', fig.data, fig.layout, {responsive: true});
+
       endRange.addEventListener('input', syncRanges);
       forcingRange.addEventListener('input', syncRanges);
       syncRanges();

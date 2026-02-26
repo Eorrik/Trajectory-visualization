@@ -6,7 +6,7 @@ from pathlib import Path
 from flask import Flask, render_template, request
 
 from src.data_processing import prepare_data, smooth_trajectory
-from src.visualization import build_chart
+from src.visualization import build_plotly_figure
 
 app = Flask(__name__)
 
@@ -77,15 +77,14 @@ def index():
     if smooth_enabled:
         filtered = smooth_trajectory(filtered, smooth_window)
 
-    chart = build_chart(filtered, forcing_ts, pen_length=pen_length, contact_threshold=contact_threshold)
-    chart_html = chart.render_embed()
+    figure = build_plotly_figure(filtered, forcing_ts, pen_length=pen_length, contact_threshold=contact_threshold)
 
     wt1_cols = [c for c in filtered.columns if c.startswith("wt1_")]
     sample_preview = filtered[["display_time", *wt1_cols[:4]]].head(12).to_dict(orient="records")
 
     return render_template(
         "index.html",
-        chart_html=chart_html,
+        plotly_figure=figure,
         start_pct=start_pct,
         end_pct=end_pct,
         forcing_pct=forcing_pct,

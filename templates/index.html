@@ -105,6 +105,7 @@
     </div>
 
     <script>
+      const form = document.getElementById('controlsForm');
       const startRange = document.getElementById('startRange');
       const endRange = document.getElementById('endRange');
       const forcingRange = document.getElementById('forcingRange');
@@ -112,6 +113,9 @@
       const startLabel = document.getElementById('startPctLabel');
       const endLabel = document.getElementById('endPctLabel');
       const forcingLabel = document.getElementById('forcingPctLabel');
+
+      const fig = {{ plotly_figure | tojson }};
+      Plotly.newPlot('plotly3d', fig.data, fig.layout, {responsive: true});
 
       function syncRanges() {
         let s = parseFloat(startRange.value);
@@ -134,13 +138,16 @@
         forcingLabel.textContent = f.toFixed(1) + '%';
       }
 
-      startRange.addEventListener('input', syncRanges);
+      let autoSubmitTimer = null;
+      function scheduleSubmit() {
+        syncRanges();
+        if (autoSubmitTimer) clearTimeout(autoSubmitTimer);
+        autoSubmitTimer = setTimeout(() => form.requestSubmit(), 180);
+      }
 
-      const fig = {{ plotly_figure | tojson }};
-      Plotly.newPlot('plotly3d', fig.data, fig.layout, {responsive: true});
-
-      endRange.addEventListener('input', syncRanges);
-      forcingRange.addEventListener('input', syncRanges);
+      startRange.addEventListener('input', scheduleSubmit);
+      endRange.addEventListener('input', scheduleSubmit);
+      forcingRange.addEventListener('input', scheduleSubmit);
       syncRanges();
     </script>
   </body>

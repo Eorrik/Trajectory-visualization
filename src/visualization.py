@@ -31,6 +31,7 @@ def _styled_line_data(points: list[list[float]], ts: np.ndarray, forcing: float 
 
     return [{"value": p, "itemStyle": {"color": _hex_color(base, float(w))}} for p, w in zip(points, weights)]
 
+
 def _xy_equal_range(points_a: list[list[float]], points_b: list[list[float]], pad_ratio: float = 0.05) -> tuple[float, float, float, float]:
     """计算 x/y 统一跨度的坐标范围，使 3D 图中的 x、y 轴等距。"""
     points = np.array(points_a + points_b, dtype=float)
@@ -52,20 +53,25 @@ def build_chart(df: pd.DataFrame, forcing: float | None, pen_length: float, cont
     tip_points = _to_points(df["tip_pos_world"])
     tail_points = _to_points(df["tail_pos_world"])
     ts = df["timestamp_unix"].to_numpy()
+
     x_min, x_max, y_min, y_max = _xy_equal_range(tip_points, tail_points)
+
     chart = Line3D(init_opts=opts.InitOpts(width="1200px", height="760px"))
     chart.add(
         series_name="Tip 轨迹",
         data=_styled_line_data(tip_points, ts, forcing, (220, 20, 60)),
-        xaxis3d_opts={"type": "value", "min": x_min, "max": x_max,"splitNumber": 8},
-        yaxis3d_opts={"type": "value", "min": y_min, "max": y_max,"splitNumber": 8},
-        zaxis3d_opts=opts.Axis3DOpts(type_="value"),
+        xaxis3d_opts={"type": "value", "min": x_min, "max": x_max, "splitNumber": 8},
+        yaxis3d_opts={"type": "value", "min": y_min, "max": y_max, "splitNumber": 8},
+        zaxis3d_opts={"type": "value"},
         grid3d_opts=opts.Grid3DOpts(width=140, height=100, depth=140, rotate_speed=22),
     )
     chart.add(
         series_name="Tail 轨迹",
         data=_styled_line_data(tail_points, ts, forcing, (30, 90, 220)),
     )
+
+    chart.options["xAxis3D"].opts.update({"min": x_min, "max": x_max, "splitNumber": 8})
+    chart.options["yAxis3D"].opts.update({"min": y_min, "max": y_max, "splitNumber": 8})
 
     pred_path = []
     connect_lines = []

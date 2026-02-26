@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -149,3 +148,20 @@ def prepare_data(meta_path: str | Path, pen_path: str | Path, imu_path: str | Pa
     out = interpolate_wt1(pen_df, imu_df)
     out["display_time"] = pd.to_datetime(out["timestamp_unix"], unit="s").dt.strftime("%y-%m-%d-%H:%M:%S")
     return PreparedData(df=out, min_ts=float(out["timestamp_unix"].min()), max_ts=float(out["timestamp_unix"].max()))
+
+
+
+def smooth_trajectory(df: pd.DataFrame, window: int) -> pd.DataFrame:
+    """对 tip/tail 轨迹做滑动平均平滑，降低采集噪声。"""
+    out = df.copy()
+    window = max(1, int(window))
+    if window == 1:
+        return out
+
+    for key in ("tip_pos_world", "tail_pos_world"):
+        pts = np.array(out[key].tolist(), dtype=float)
+        if len(pts) == 0:
+            continue
+        smoothed = pd.DataFrame(pts).rolling(window=window, min_periods=1, center=True).mean().to_numpy()
+        out[key] = smoothed.tolist()
+    return out

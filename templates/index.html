@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>书法轨迹可视化应用</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f5f6f8; }
+      .wrap { max-width: 1300px; margin: 0 auto; padding: 20px; }
+      .panel { background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 14px; }
+      .row { display: grid; grid-template-columns: 220px 1fr 85px; gap: 10px; align-items: center; margin: 10px 0; }
+      label { font-size: 13px; color: #333; }
+      input[type='range'] { width: 100%; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 10px; }
+      input[type='number'] { width: 100%; padding: 6px 8px; }
+      button { margin-top: 10px; padding: 8px 12px; border: none; border-radius: 6px; background: #1f6feb; color: #fff; cursor: pointer; }
+      .hint { color: #555; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+      th { background: #efefef; }
+    </style>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="panel">
+        <h2>书法采集数据可视化（Flask + Plotly）</h2>
+        <p>全局时间范围：{{ min_ts }} ~ {{ max_ts }}，当前渲染点数：{{ rows }}</p>
+
+        <form method="get" id="controlsForm">
+          <div class="row">
+            <label for="startRange">time_start 滑条</label>
+            <input id="startRange" type="range" min="0" max="100" step="0.1" name="start_pct" value="{{ start_pct }}" />
+            <span id="startPctLabel">{{ '%.1f'|format(start_pct) }}%</span>
+          </div>
+
+          <div class="row">
+            <label for="endRange">time_end 滑条</label>
+            <input id="endRange" type="range" min="0" max="100" step="0.1" name="end_pct" value="{{ end_pct }}" />
+            <span id="endPctLabel">{{ '%.1f'|format(end_pct) }}%</span>
+          </div>
+
+          <div class="row">
+            <label for="forcingRange">time_forcing 滑条（默认=开始时间）</label>
+            <input id="forcingRange" type="range" min="{{ forcing_pct_min }}" max="{{ forcing_pct_max }}" step="0.1" name="forcing_pct" value="{{ forcing_pct }}" />
+            <span id="forcingPctLabel">{{ '%.1f'|format(forcing_pct) }}%</span>
+          </div>
+
+          <p class="hint">
+            当前窗口：{{ time_start }} ~ {{ time_end }}；当前 forcing：{{ time_forcing }}。
+          </p>
+
+          <div class="grid">
+            <div>
+              <label>pen_length (m)</label>
+              <input type="number" name="pen_length" value="{{ pen_length }}" step="0.01" />
+            </div>
+            <div>
+              <label>contact_threshold (m)</label>
+              <input type="number" name="contact_threshold" value="{{ contact_threshold }}" step="0.001" />
+            </div>
+            <div>
+              <label>smooth_window (平滑窗口，>=1)</label>
+              <input type="number" name="smooth_window" value="{{ smooth_window }}" step="1" min="1" />
+            </div>
+          </div>
+
+          <p style="margin-top: 8px;">
+            <label>
+              <input type="checkbox" name="smooth" {% if smooth_enabled %}checked{% endif %} />
+              启用轨迹平滑（滑动平均，降低采集误差）
+            </label>
+          </p>
+
+          <button type="submit">更新图表</button>
+        </form>
+      </div>
+
+      <div class="panel"><div id="plotly3d" style="width:100%;height:760px;"></div></div>
+
+      <div class="panel">
+        <h3>WT1 插值数据预览（前 12 行）</h3>
+        {% if sample_preview %}
+        <table>
+          <thead>
+            <tr>
+              {% for key in sample_preview[0].keys() %}
+              <th>{{ key }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in sample_preview %}
+            <tr>
+              {% for value in row.values() %}
+              <td>{{ value }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="hint">当前过滤条件下没有可展示数据。</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById('controlsForm');
+      const startRange = document.getElementById('startRange');
+      const endRange = document.getElementById('endRange');
+      const forcingRange = document.getElementById('forcingRange');
+
+      const startLabel = document.getElementById('startPctLabel');
+      const endLabel = document.getElementById('endPctLabel');
+      const forcingLabel = document.getElementById('forcingPctLabel');
+
+      const fig = {{ plotly_figure | tojson }};
+      Plotly.newPlot('plotly3d', fig.data, fig.layout, {responsive: true});
+
+      function syncRanges() {
+        let s = parseFloat(startRange.value);
+        let e = parseFloat(endRange.value);
+        if (s > e) {
+          [s, e] = [e, s];
+          startRange.value = s;
+          endRange.value = e;
+        }
+
+        forcingRange.min = s;
+        forcingRange.max = e;
+        let f = parseFloat(forcingRange.value);
+        if (f < s) f = s;
+        if (f > e) f = e;
+        forcingRange.value = f;
+
+        startLabel.textContent = s.toFixed(1) + '%';
+        endLabel.textContent = e.toFixed(1) + '%';
+        forcingLabel.textContent = f.toFixed(1) + '%';
+      }
+
+      let autoSubmitTimer = null;
+      function scheduleSubmit() {
+        syncRanges();
+        if (autoSubmitTimer) clearTimeout(autoSubmitTimer);
+        autoSubmitTimer = setTimeout(() => form.requestSubmit(), 180);
+      }
+
+      startRange.addEventListener('input', scheduleSubmit);
+      endRange.addEventListener('input', scheduleSubmit);
+      forcingRange.addEventListener('input', scheduleSubmit);
+      syncRanges();
+    </script>
+  </body>
+</html>

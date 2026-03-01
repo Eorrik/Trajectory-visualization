@@ -5,17 +5,25 @@ from pathlib import Path
 
 from flask import Flask, render_template, request
 
-from src.data_processing import prepare_data, smooth_trajectory
-from src.visualization import build_plotly_figure
+from src.data_processing import (
+    filter_hand_data_by_pct,
+    load_right_hand_data,
+    prepare_data,
+    smooth_right_hand_trajectory,
+    smooth_trajectory,
+)
+from src.visualization import build_hand_plotly_figure, build_plotly_figure
 
 app = Flask(__name__)
 
 ROOT = Path(__file__).resolve().parent
 META_PATH = ROOT / "sample" / "meta.json"
 PEN_PATH = ROOT / "sample" / "pen_data.jsonl"
-IMU_PATH = ROOT / "sample" / "20260224152819.txt"
+IMU_PATH = ROOT / "sample" / "20260226151623.txt"
+HAND_PREDS_PATH = ROOT / "sample" / "preds_world.jsonl"
 
 prepared = prepare_data(META_PATH, PEN_PATH, IMU_PATH)
+hand_prepared = load_right_hand_data(HAND_PREDS_PATH)
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -78,6 +86,10 @@ def index():
         filtered = smooth_trajectory(filtered, smooth_window)
 
     figure = build_plotly_figure(filtered, forcing_ts, pen_length=pen_length, contact_threshold=contact_threshold)
+    hand_filtered = filter_hand_data_by_pct(hand_prepared, start_pct, end_pct)
+    if smooth_enabled:
+        hand_filtered = smooth_right_hand_trajectory(hand_filtered, smooth_window)
+    hand_figure = build_hand_plotly_figure(hand_filtered)
 
     wt1_cols = [c for c in filtered.columns if c.startswith("wt1_")]
     sample_preview = filtered[["display_time", *wt1_cols[:4]]].head(12).to_dict(orient="records")
@@ -85,6 +97,7 @@ def index():
     return render_template(
         "index.html",
         plotly_figure=figure,
+        hand_plotly_figure=hand_figure,
         start_pct=start_pct,
         end_pct=end_pct,
         forcing_pct=forcing_pct,

@@ -104,6 +104,78 @@ def load_imu_txt(txt_path: str | Path) -> pd.DataFrame:
     return df.sort_values("timestamp_unix").reset_index(drop=True)
 
 
+def load_right_hand_data(preds_path: str | Path) -> pd.DataFrame:
+    """加载手部3D数据，仅保留 right 手的关键点序列。"""
+    rows: list[dict[str, Any]] = []
+    with open(preds_path, "r", encoding="utf-8") as f:
+        for frame_idx, line in enumerate(f):
+            rec = json.loads(line)
+            hands = rec.get("hands") or []
+
+            # 兼容文档与实际导出的字段命名
+            pred3d = rec.get("pred3d")
+            if pred3d is None:
+                pred3d = rec.get("pred3d_world")
+            if not isinstance(pred3d, list):
+                continue
+
+            for hand_idx, hand_side in enumerate(hands):
+                if hand_side != "right" or hand_idx >= len(pred3d):
+                    continue
+                keypoints = pred3d[hand_idx]
+                if not isinstance(keypoints, list) or len(keypoints) == 0:
+                    continue
+
+                clean_points: list[list[float]] = []
+                for pt in keypoints:
+                    vec = _safe_vector(pt)
+                    if vec is None:
+                        continue
+                    clean_points.append(vec)
+
+                if clean_points:
+                    rows.append({"frame_idx": frame_idx, "right_hand_points": clean_points})
+
+    return pd.DataFrame(rows)
+
+
+def filter_hand_data_by_pct(hand_df: pd.DataFrame, start_pct: float, end_pct: float) -> pd.DataFrame:
+    """按百分比窗口过滤手部序列，保持与主时间窗口联动。"""
+    if hand_df.empty:
+        return hand_df
+
+    total = len(hand_df)
+    start_idx = int(np.floor((start_pct / 100.0) * max(total - 1, 0)))
+    end_idx = int(np.ceil((end_pct / 100.0) * max(total - 1, 0)))
+    start_idx = int(np.clip(start_idx, 0, total - 1))
+    end_idx = int(np.clip(end_idx, start_idx, total - 1))
+    return hand_df.iloc[start_idx : end_idx + 1].reset_index(drop=True)
+
+
+def smooth_right_hand_trajectory(hand_df: pd.DataFrame, window: int) -> pd.DataFrame:
+    """对 right 手每个关键点做按帧滑动平均平滑。"""
+    if hand_df.empty:
+        return hand_df
+
+    out = hand_df.copy()
+    window = max(1, int(window))
+    if window == 1:
+        return out
+
+    points = np.array(out["right_hand_points"].tolist(), dtype=float)
+    # [n_frames, n_joints, 3] -> 按帧对每个关节单独平滑
+    n_frames, n_joints, _ = points.shape
+    smoothed = np.empty_like(points)
+    for joint_idx in range(n_joints):
+        joint_xyz = points[:, joint_idx, :]
+        smoothed[:, joint_idx, :] = (
+            pd.DataFrame(joint_xyz).rolling(window=window, min_periods=1, center=True).mean().to_numpy()
+        )
+
+    out["right_hand_points"] = smoothed.tolist()
+    return out
+
+
 def interpolate_wt1(pen_df: pd.DataFrame, imu_df: pd.DataFrame) -> pd.DataFrame:
     wt1 = imu_df[imu_df["device_type"] == "WT1"].copy()
     if wt1.empty:

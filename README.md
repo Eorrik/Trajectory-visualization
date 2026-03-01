@@ -23,13 +23,14 @@ uv run python app.py
 4. `pen_length`：笔长参数，用于尾部延伸预测笔尖。
 5. `contact_threshold`：桌面接触阈值。
 6. `smooth` + `smooth_window`：轨迹平滑选项（滑动平均）用于缓解采集噪声。
+7. 新增右手手部 3D 轨迹图：读取 `sample/preds_world.jsonl`（`pred3d`/`pred3d_world`），独立展示 right 手运动轨迹。
 
 ## 3. 数据来源
 
 默认读取：
 - `sample/meta.json`
 - `sample/pen_data.jsonl`
-- `sample/20260224152819.txt`
+- `sample/20260226151623.txt`
 
 ## 4. 开发检查
 

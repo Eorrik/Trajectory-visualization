@@ -26,3 +26,5 @@ data/
 # Logs
 *.log
 
+# uv 锁定文件
+uv.lock

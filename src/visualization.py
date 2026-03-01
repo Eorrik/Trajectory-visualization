@@ -192,3 +192,123 @@ def build_plotly_figure(df: pd.DataFrame, forcing: float | None, pen_length: flo
     }
 
     return {"data": traces, "layout": layout}
+
+
+def build_hand_plotly_figure(hand_df: pd.DataFrame) -> dict[str, Any]:
+    if hand_df.empty:
+        return {
+            "data": [],
+            "layout": {
+                "title": "手部 3D 轨迹（right）",
+                "height": 760,
+                "annotations": [
+                    {
+                        "text": "当前无可用 right 手数据",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x": 0.5,
+                        "y": 0.5,
+                        "showarrow": False,
+                        "font": {"size": 16},
+                    }
+                ],
+            },
+        }
+
+    points_3d = np.array(hand_df["right_hand_points"].tolist(), dtype=float)
+    n_frames, n_joints, _ = points_3d.shape
+    time_weights = np.linspace(0.35, 1.0, n_frames)
+
+    # 21 点位：按点位索引分配色相梯度，再按帧序提升明度
+    # 自定义从蓝->青->绿->黄->红的渐变带
+    anchor = np.array(
+        [
+            [40, 80, 220],
+            [40, 200, 220],
+            [60, 200, 120],
+            [250, 180, 40],
+            [230, 60, 60],
+        ],
+        dtype=float,
+    )
+    anchor_x = np.linspace(0.0, 1.0, len(anchor))
+    joint_x = np.linspace(0.0, 1.0, n_joints)
+    joint_rgb = np.stack([np.interp(joint_x, anchor_x, anchor[:, i]) for i in range(3)], axis=1)
+    joint_base_colors = [tuple(int(v) for v in rgb) for rgb in joint_rgb]
+
+    traces: list[dict[str, Any]] = []
+    for joint_idx in range(n_joints):
+        xyz = points_3d[:, joint_idx, :]
+        colors = [_hex_color(joint_base_colors[joint_idx], float(w)) for w in time_weights]
+        traces.append(
+            {
+                "type": "scatter3d",
+                "mode": "lines+markers",
+                "name": f"右手点位 {joint_idx:02d}",
+                "x": xyz[:, 0].tolist(),
+                "y": xyz[:, 1].tolist(),
+                "z": xyz[:, 2].tolist(),
+                "line": {"width": 2.2, "color": colors},
+                "marker": {"size": 2.0, "color": colors},
+                "showlegend": joint_idx in {0, 5, 17, 20},
+            }
+        )
+
+    wrist_xyz = points_3d[:, 0, :]
+    hand_back_a = points_3d[:, 5, :]
+    hand_back_b = points_3d[:, 17, :]
+    traces.extend(
+        [
+            {
+                "type": "scatter3d",
+                "mode": "lines",
+                "name": "手腕轨迹(index=0)",
+                "x": wrist_xyz[:, 0].tolist(),
+                "y": wrist_xyz[:, 1].tolist(),
+                "z": wrist_xyz[:, 2].tolist(),
+                "line": {"width": 6, "color": "#111111"},
+            },
+            {
+                "type": "scatter3d",
+                "mode": "lines",
+                "name": "手背点轨迹 A(index=5)",
+                "x": hand_back_a[:, 0].tolist(),
+                "y": hand_back_a[:, 1].tolist(),
+                "z": hand_back_a[:, 2].tolist(),
+                "line": {"width": 5, "color": "#1f8a3a"},
+            },
+            {
+                "type": "scatter3d",
+                "mode": "lines",
+                "name": "手背点轨迹 B(index=17)",
+                "x": hand_back_b[:, 0].tolist(),
+                "y": hand_back_b[:, 1].tolist(),
+                "z": hand_back_b[:, 2].tolist(),
+                "line": {"width": 5, "color": "#b3368f"},
+            },
+        ]
+    )
+
+    all_points = points_3d.reshape(-1, 3)
+    x_vals, y_vals, z_vals = all_points[:, 0], all_points[:, 1], all_points[:, 2]
+    x_span = max(float(x_vals.max() - x_vals.min()), 1e-6)
+    y_span = max(float(y_vals.max() - y_vals.min()), 1e-6)
+    z_span = max(float(z_vals.max() - z_vals.min()), 1e-6)
+    max_span = max(x_span, y_span, z_span)
+    pad = max_span * 0.12
+
+    layout: dict[str, Any] = {
+        "title": "手部 3D 轨迹（right，21点位顺序梯度 + 帧明度渐变）",
+        "height": 760,
+        "scene": {
+            "aspectmode": "manual",
+            "aspectratio": {"x": 1, "y": 1, "z": max(0.55, z_span / max(x_span, y_span, 1e-6))},
+            "xaxis": {"title": "X", "range": [float(x_vals.min() - pad), float(x_vals.max() + pad)]},
+            "yaxis": {"title": "Y", "range": [float(y_vals.min() - pad), float(y_vals.max() + pad)]},
+            "zaxis": {"title": "Z", "range": [float(z_vals.min() - pad), float(z_vals.max() + pad)]},
+        },
+        "legend": {"orientation": "h", "y": 1.03},
+        "margin": {"l": 0, "r": 0, "b": 0, "t": 60},
+    }
+
+    return {"data": traces, "layout": layout}

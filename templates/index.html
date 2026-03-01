@@ -76,6 +76,7 @@
       </div>
 
       <div class="panel"><div id="plotly3d" style="width:100%;height:760px;"></div></div>
+      <div class="panel"><div id="handPlotly3d" style="width:100%;height:760px;"></div></div>
 
       <div class="panel">
         <h3>WT1 插值数据预览（前 12 行）</h3>
@@ -115,7 +116,9 @@
       const forcingLabel = document.getElementById('forcingPctLabel');
 
       const fig = {{ plotly_figure | tojson }};
+      const handFig = {{ hand_plotly_figure | tojson }};
       Plotly.newPlot('plotly3d', fig.data, fig.layout, {responsive: true});
+      Plotly.newPlot('handPlotly3d', handFig.data, handFig.layout, {responsive: true});
 
       function syncRanges() {
         let s = parseFloat(startRange.value);

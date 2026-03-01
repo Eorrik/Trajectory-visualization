@@ -13,13 +13,7 @@ app = Flask(__name__)
 ROOT = Path(__file__).resolve().parent
 META_PATH = ROOT / "sample" / "meta.json"
 PEN_PATH = ROOT / "sample" / "pen_data.jsonl"
-def _find_imu_txt(sample_dir: Path) -> Path:
-    txts = sorted(sample_dir.glob("*.txt"))
-    if not txts:
-        raise FileNotFoundError(str(sample_dir / "*.txt"))
-    latest = max(txts, key=lambda p: p.stat().st_mtime)
-    return latest
-IMU_PATH = _find_imu_txt(ROOT / "sample")
+IMU_PATH = ROOT / "sample" / "20260224152819.txt"
 
 prepared = prepare_data(META_PATH, PEN_PATH, IMU_PATH)
 

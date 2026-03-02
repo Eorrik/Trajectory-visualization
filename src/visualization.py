@@ -244,13 +244,13 @@ def build_hand_plotly_figure(hand_df: pd.DataFrame) -> dict[str, Any]:
             {
                 "type": "scatter3d",
                 "mode": "lines+markers",
-                "name": f"右手点位 {joint_idx:02d}",
+                "name": f"右手点位 {joint_idx + 1:02d}",
                 "x": xyz[:, 0].tolist(),
                 "y": xyz[:, 1].tolist(),
                 "z": xyz[:, 2].tolist(),
                 "line": {"width": 2.2, "color": colors},
                 "marker": {"size": 2.0, "color": colors},
-                "showlegend": joint_idx in {0, 5, 17, 20},
+                "showlegend": True,
             }
         )
 
@@ -267,6 +267,7 @@ def build_hand_plotly_figure(hand_df: pd.DataFrame) -> dict[str, Any]:
                 "y": wrist_xyz[:, 1].tolist(),
                 "z": wrist_xyz[:, 2].tolist(),
                 "line": {"width": 6, "color": "#111111"},
+                "showlegend": False,
             },
             {
                 "type": "scatter3d",
@@ -276,6 +277,7 @@ def build_hand_plotly_figure(hand_df: pd.DataFrame) -> dict[str, Any]:
                 "y": hand_back_a[:, 1].tolist(),
                 "z": hand_back_a[:, 2].tolist(),
                 "line": {"width": 5, "color": "#1f8a3a"},
+                "showlegend": False,
             },
             {
                 "type": "scatter3d",
@@ -285,6 +287,7 @@ def build_hand_plotly_figure(hand_df: pd.DataFrame) -> dict[str, Any]:
                 "y": hand_back_b[:, 1].tolist(),
                 "z": hand_back_b[:, 2].tolist(),
                 "line": {"width": 5, "color": "#b3368f"},
+                "showlegend": False,
             },
         ]
     )

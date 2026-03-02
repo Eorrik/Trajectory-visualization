@@ -110,31 +110,37 @@ def load_right_hand_data(preds_path: str | Path) -> pd.DataFrame:
     with open(preds_path, "r", encoding="utf-8") as f:
         for frame_idx, line in enumerate(f):
             rec = json.loads(line)
-            hands = rec.get("hands") or []
-
-            # 兼容文档与实际导出的字段命名
-            pred3d = rec.get("pred3d")
-            if pred3d is None:
-                pred3d = rec.get("pred3d_world")
-            if not isinstance(pred3d, list):
+            pred3d_world = rec.get("pred3d_world")
+            if not isinstance(pred3d_world, list) or len(pred3d_world) == 0:
                 continue
 
-            for hand_idx, hand_side in enumerate(hands):
-                if hand_side != "right" or hand_idx >= len(pred3d):
-                    continue
-                keypoints = pred3d[hand_idx]
-                if not isinstance(keypoints, list) or len(keypoints) == 0:
-                    continue
+            keypoints: list[Any] | None = None
+            first = pred3d_world[0]
+            if isinstance(first, list) and len(first) == 3:
+                keypoints = pred3d_world
+            else:
+                for candidate in pred3d_world:
+                    if isinstance(candidate, list) and candidate and isinstance(candidate[0], list):
+                        if len(candidate) == 21:
+                            keypoints = candidate
+                            break
+                        if keypoints is None:
+                            keypoints = candidate
 
-                clean_points: list[list[float]] = []
-                for pt in keypoints:
-                    vec = _safe_vector(pt)
-                    if vec is None:
-                        continue
-                    clean_points.append(vec)
+            if not keypoints:
+                continue
 
-                if clean_points:
-                    rows.append({"frame_idx": frame_idx, "right_hand_points": clean_points})
+            clean_points: list[list[float]] = []
+            for pt in keypoints:
+                vec = _safe_vector(pt)
+                if vec is None:
+                    continue
+                clean_points.append(vec)
+
+            if len(clean_points) != 21:
+                continue
+
+            rows.append({"frame_idx": frame_idx, "right_hand_points": clean_points})
 
     return pd.DataFrame(rows)
 

@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 META_PATH = ROOT / "sample" / "meta.json"
 PEN_PATH = ROOT / "sample" / "pen_data.jsonl"
 IMU_PATH = ROOT / "sample" / "20260226151623.txt"
-HAND_PREDS_PATH = ROOT / "sample" / "preds_world.jsonl"
+HAND_PREDS_PATH = ROOT / "sample" / "pred3d_world.jsonl"
 
 prepared = prepare_data(META_PATH, PEN_PATH, IMU_PATH)
 hand_prepared = load_right_hand_data(HAND_PREDS_PATH)

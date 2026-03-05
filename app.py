@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from pathlib import Path
+from urllib.parse import urlencode
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response, redirect
 
 from src.data_processing import (
     filter_hand_data_by_pct,
@@ -57,6 +59,30 @@ def format_dt_local(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _filename_token(value: float) -> str:
+    s = f"{float(value):.1f}"
+    return s.replace(".", "p").replace("-", "m")
+
+
+def _jsonable(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        if value != value:
+            return None
+        return value
+    if hasattr(value, "item"):
+        try:
+            return _jsonable(value.item())
+        except Exception:
+            pass
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    return str(value)
+
+
 @app.route("/", methods=["GET"])
 def index():
     q = request.args
@@ -94,6 +120,9 @@ def index():
     wt1_cols = [c for c in filtered.columns if c.startswith("wt1_")]
     sample_preview = filtered[["display_time", *wt1_cols[:4]]].head(12).to_dict(orient="records")
 
+    saved_file = q.get("saved_file")
+    saved_rows = q.get("saved_rows")
+
     return render_template(
         "index.html",
         plotly_figure=figure,
@@ -114,7 +143,60 @@ def index():
         max_ts=format_dt_local(prepared.max_ts),
         rows=len(filtered),
         sample_preview=sample_preview,
+        saved_file=saved_file,
+        saved_rows=saved_rows,
     )
+
+
+@app.route("/save", methods=["POST"])
+def save_clip() -> Response:
+    q = request.form
+
+    start_pct = clamp(parse_float(q.get("start_pct"), 0.0), 0.0, 100.0)
+    end_pct = clamp(parse_float(q.get("end_pct"), 100.0), 0.0, 100.0)
+    if start_pct > end_pct:
+        start_pct, end_pct = end_pct, start_pct
+
+    forcing_pct = clamp(parse_float(q.get("forcing_pct"), start_pct), start_pct, end_pct)
+    pen_length = parse_float(q.get("pen_length"), 0.18)
+    contact_threshold = parse_float(q.get("contact_threshold"), 0.01)
+    smooth_enabled = q.get("smooth") == "on"
+    smooth_window = max(1, parse_int(q.get("smooth_window"), 5))
+
+    time_start = map_pct_to_ts(start_pct, prepared.min_ts, prepared.max_ts)
+    time_end = map_pct_to_ts(end_pct, prepared.min_ts, prepared.max_ts)
+
+    df = prepared.df
+    clip = df[(df["timestamp_unix"] >= time_start) & (df["timestamp_unix"] <= time_end)].copy()
+    if smooth_enabled:
+        clip = smooth_trajectory(clip, smooth_window)
+
+    exports_dir = ROOT / "exports"
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"clip_{_filename_token(start_pct)}_{_filename_token(end_pct)}_{stamp}.jsonl"
+    out_path = exports_dir / filename
+
+    records = clip.to_dict(orient="records")
+    with open(out_path, "w", encoding="utf-8") as f:
+        for rec in records:
+            clean = {str(k): _jsonable(v) for k, v in rec.items()}
+            f.write(json.dumps(clean, ensure_ascii=False) + "\n")
+
+    params = {
+        "start_pct": start_pct,
+        "end_pct": end_pct,
+        "forcing_pct": forcing_pct,
+        "pen_length": pen_length,
+        "contact_threshold": contact_threshold,
+        "smooth_window": smooth_window,
+        "saved_file": filename,
+        "saved_rows": len(records),
+    }
+    if smooth_enabled:
+        params["smooth"] = "on"
+
+    return redirect(f"/?{urlencode(params)}")
 
 
 if __name__ == "__main__":

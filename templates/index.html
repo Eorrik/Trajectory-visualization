@@ -25,6 +25,9 @@
       <div class="panel">
         <h2>书法采集数据可视化（Flask + Plotly）</h2>
         <p>全局时间范围：{{ min_ts }} ~ {{ max_ts }}，当前渲染点数：{{ rows }}</p>
+        {% if saved_file %}
+        <p class="hint">已保存片段：{{ saved_file }}（{{ saved_rows }} 行），目录：exports/</p>
+        {% endif %}
 
         <form method="get" id="controlsForm">
           <div class="row">
@@ -72,6 +75,7 @@
           </p>
 
           <button type="submit">更新图表</button>
+          <button type="submit" formaction="/save" formmethod="post">保存当前片段</button>
         </form>
       </div>
 

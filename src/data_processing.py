@@ -89,6 +89,59 @@ def load_pen_data(pen_path: str | Path, plane: list[float]) -> pd.DataFrame:
     return df.sort_values("timestamp_unix").reset_index(drop=True)
 
 
+def auto_calibrate_pen_data_file(pen_path: str | Path, ratio_threshold: float = 0.65, min_samples: int = 80) -> bool:
+    pen_path = Path(pen_path)
+    valid = 0
+    tip_z_gt_tail_z = 0
+
+    try:
+        with open(pen_path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                tip_world = _safe_vector(rec.get("tip_pos_world"))
+                tail_world = _safe_vector(rec.get("tail_pos_world"))
+                if tip_world is None or tail_world is None:
+                    continue
+                valid += 1
+                if tip_world[2] > tail_world[2]:
+                    tip_z_gt_tail_z += 1
+    except FileNotFoundError:
+        return False
+
+    if valid < min_samples:
+        return False
+
+    if (tip_z_gt_tail_z / valid) <= ratio_threshold:
+        return False
+
+    tmp_path = pen_path.with_suffix(pen_path.suffix + ".tmp")
+    with open(pen_path, "r", encoding="utf-8") as fin, open(tmp_path, "w", encoding="utf-8") as fout:
+        for line in fin:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                fout.write(line.rstrip("\n") + "\n")
+                continue
+
+            tip_world = _safe_vector(rec.get("tip_pos_world"))
+            tail_world = _safe_vector(rec.get("tail_pos_world"))
+            if tip_world is not None and tail_world is not None:
+                rec["tip_pos_world"], rec["tail_pos_world"] = tail_world, tip_world
+
+            tip_cam = _safe_vector(rec.get("tip_pos_cam"))
+            tail_cam = _safe_vector(rec.get("tail_pos_cam"))
+            if tip_cam is not None and tail_cam is not None:
+                rec["tip_pos_cam"], rec["tail_pos_cam"] = tail_cam, tip_cam
+
+            fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    tmp_path.replace(pen_path)
+    return True
+
+
 def load_imu_txt(txt_path: str | Path) -> pd.DataFrame:
     df = pd.read_csv(txt_path, sep="\t", dtype=str)
     df.columns = [c.strip() for c in df.columns]
@@ -219,6 +272,7 @@ def interpolate_wt1(pen_df: pd.DataFrame, imu_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_data(meta_path: str | Path, pen_path: str | Path, imu_path: str | Path) -> PreparedData:
+    auto_calibrate_pen_data_file(pen_path)
     meta = load_meta(meta_path)
     plane = meta.get("desk_plane", [0, 1, 0, 0])
     pen_df = load_pen_data(pen_path, plane)

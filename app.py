@@ -98,7 +98,7 @@ def index():
     time_end = map_pct_to_ts(end_pct, prepared.min_ts, prepared.max_ts)
     forcing_ts = map_pct_to_ts(forcing_pct, prepared.min_ts, prepared.max_ts)
 
-    pen_length = parse_float(q.get("pen_length"), 0.18)
+    pen_length = parse_float(q.get("pen_length"), 0.21)
     contact_threshold = parse_float(q.get("contact_threshold"), 0.01)
     smooth_enabled = q.get("smooth") == "on"
     smooth_window = max(1, parse_int(q.get("smooth_window"), 5))

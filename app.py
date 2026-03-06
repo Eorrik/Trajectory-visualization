@@ -19,11 +19,21 @@ from src.visualization import build_hand_plotly_figure, build_plotly_figure
 app = Flask(__name__)
 
 ROOT = Path(__file__).resolve().parent
-META_PATH = ROOT / "sample" / "meta.json"
-PEN_PATH = ROOT / "sample" / "pen_data.jsonl"
-IMU_PATH = ROOT / "sample" / "20260226151623.txt"
-HAND_PREDS_PATH = ROOT / "sample" / "pred3d_world.jsonl"
+SAMPLE_DIR = ROOT / "sample"
+META_PATH = SAMPLE_DIR / "meta.json"
+PEN_PATH = SAMPLE_DIR / "pen_data.jsonl"
+HAND_PREDS_PATH = SAMPLE_DIR / "pred3d_world.jsonl"
 
+
+def resolve_imu_path(sample_dir: Path) -> Path:
+    txt_files = sorted(sample_dir.glob("*.txt"))
+    if len(txt_files) != 1:
+        names = ", ".join(p.name for p in txt_files)
+        raise RuntimeError(f"sample 目录下必须且只能有 1 个 .txt 作为 IMU 文件，当前数量={len(txt_files)}：{names}")
+    return txt_files[0]
+
+
+IMU_PATH = resolve_imu_path(SAMPLE_DIR)
 prepared = prepare_data(META_PATH, PEN_PATH, IMU_PATH)
 hand_prepared = load_right_hand_data(HAND_PREDS_PATH)
 

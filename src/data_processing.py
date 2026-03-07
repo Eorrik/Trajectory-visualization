@@ -11,7 +11,9 @@ import pandas as pd
 
 @dataclass
 class PreparedData:
-    df: pd.DataFrame
+    pen_df: pd.DataFrame
+    imu_df: pd.DataFrame
+
     min_ts: float
     max_ts: float
 
@@ -154,7 +156,49 @@ def load_imu_txt(txt_path: str | Path) -> pd.DataFrame:
         if c in {"时间", "设备名称", "timestamp", "device_type"}:
             continue
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df.sort_values("timestamp_unix").reset_index(drop=True)
+    return df[df["device_type"].isin(["WT1", "WT2", "WT3", "WT4"])].sort_values("timestamp_unix").reset_index(drop=True)
+
+
+def _overlap_count(ts: pd.Series, start: float, end: float) -> int:
+    return int(((ts >= start) & (ts <= end)).sum())
+
+
+def align_imu_with_pen_data(pen_df: pd.DataFrame, imu_df: pd.DataFrame) -> pd.DataFrame:
+    if pen_df.empty or imu_df.empty:
+        return imu_df.copy()
+
+    out = imu_df.copy()
+    pen_min, pen_max = float(pen_df["timestamp_unix"].min()), float(pen_df["timestamp_unix"].max())
+
+    # 记录常见时区偏移：优先尝试 0h / ±8h 自动修正
+    candidate_offsets = [0.0, -8.0 * 3600.0, 8.0 * 3600.0]
+    best_offset = 0.0
+    best_count = -1
+    for offset in candidate_offsets:
+        aligned = out["timestamp_unix"] + offset
+        count = _overlap_count(aligned, pen_min, pen_max)
+        if count > best_count or (count == best_count and abs(offset) < abs(best_offset)):
+            best_offset = offset
+            best_count = count
+
+    # 若常见偏移都无重叠，再兜底对齐首帧
+    if best_count <= 0:
+        best_offset = pen_min - float(out["timestamp_unix"].min())
+
+    out["timestamp_unix_aligned"] = out["timestamp_unix"] + best_offset
+    out["time_offset_seconds"] = best_offset
+
+    # 只保留与 pen 数据时间窗重叠的 IMU 记录
+    out = out[(out["timestamp_unix_aligned"] >= pen_min) & (out["timestamp_unix_aligned"] <= pen_max)].copy()
+    aligned_dt = pd.to_datetime(out["timestamp_unix_aligned"], unit="s")
+    out["display_time"] = aligned_dt.dt.strftime("%H:%M:%S.%f").str[:-3]
+    out["display_time_mmss_mmm"] = aligned_dt.dt.strftime("%M:%S:%f").str[:-3]
+
+
+    accel_cols = ["加速度X(g)", "加速度Y(g)", "加速度Z(g)"]
+    out["accel_magnitude(g)"] = np.sqrt(np.square(out[accel_cols]).sum(axis=1))
+    return out.sort_values("timestamp_unix_aligned").reset_index(drop=True)
+
 
 
 def load_right_hand_data(preds_path: str | Path) -> pd.DataFrame:
@@ -235,40 +279,6 @@ def smooth_right_hand_trajectory(hand_df: pd.DataFrame, window: int) -> pd.DataF
     return out
 
 
-def interpolate_wt1(pen_df: pd.DataFrame, imu_df: pd.DataFrame) -> pd.DataFrame:
-    wt1 = imu_df[imu_df["device_type"] == "WT1"].copy()
-    if wt1.empty:
-        return pen_df
-
-    numeric_cols = [
-        c
-        for c in wt1.columns
-        if c
-        not in {
-            "时间",
-            "设备名称",
-            "timestamp",
-            "timestamp_unix",
-            "device_type",
-            "版本号()",
-        }
-        and pd.api.types.is_numeric_dtype(wt1[c])
-    ]
-
-    x = wt1["timestamp_unix"].to_numpy()
-    valid = np.isfinite(x)
-    x = x[valid]
-    if len(x) < 2:
-        return pen_df
-
-    target = pen_df["timestamp_unix"].to_numpy()
-    for col in numeric_cols:
-        y = wt1[col].to_numpy()[valid]
-        finite = np.isfinite(y)
-        if finite.sum() < 2:
-            continue
-        pen_df[f"wt1_{col}"] = np.interp(target, x[finite], y[finite], left=np.nan, right=np.nan)
-    return pen_df
 
 
 def prepare_data(meta_path: str | Path, pen_path: str | Path, imu_path: str | Path) -> PreparedData:
@@ -277,9 +287,15 @@ def prepare_data(meta_path: str | Path, pen_path: str | Path, imu_path: str | Pa
     plane = meta.get("desk_plane", [0, 1, 0, 0])
     pen_df = load_pen_data(pen_path, plane)
     imu_df = load_imu_txt(imu_path)
-    out = interpolate_wt1(pen_df, imu_df)
-    out["display_time"] = pd.to_datetime(out["timestamp_unix"], unit="s").dt.strftime("%y-%m-%d-%H:%M:%S")
-    return PreparedData(df=out, min_ts=float(out["timestamp_unix"].min()), max_ts=float(out["timestamp_unix"].max()))
+    imu_aligned_df = align_imu_with_pen_data(pen_df, imu_df)
+    pen_df["display_time"] = pd.to_datetime(pen_df["timestamp_unix"], unit="s").dt.strftime("%H:%M:%S.%f").str[:-3]
+    return PreparedData(
+        pen_df=pen_df,
+        imu_df=imu_aligned_df,
+        min_ts=float(pen_df["timestamp_unix"].min()),
+        max_ts=float(pen_df["timestamp_unix"].max()),
+    )
+
 
 
 

@@ -15,6 +15,7 @@ from src.data_processing import (
     smooth_trajectory,
 )
 from src.visualization import build_hand_plotly_figure, build_plotly_figure
+from src.visualization import build_imu_plotly_figures
 
 app = Flask(__name__)
 
@@ -113,7 +114,11 @@ def index():
     smooth_enabled = q.get("smooth") == "on"
     smooth_window = max(1, parse_int(q.get("smooth_window"), 5))
 
-    df = prepared.df
+    df = prepared.pen_df
+    imu_df = prepared.imu_df
+    filtered = df[(df["timestamp_unix"] >= time_start) & (df["timestamp_unix"] <= time_end)].copy()
+    imu_filtered = imu_df[(imu_df["timestamp_unix_aligned"] >= time_start) & (imu_df["timestamp_unix_aligned"] <= time_end)].copy()
+
     filtered = df[(df["timestamp_unix"] >= time_start) & (df["timestamp_unix"] <= time_end)].copy()
     if filtered.empty:
         filtered = df.head(10).copy()
@@ -126,10 +131,8 @@ def index():
     if smooth_enabled:
         hand_filtered = smooth_right_hand_trajectory(hand_filtered, smooth_window)
     hand_figure = build_hand_plotly_figure(hand_filtered)
-
-    wt1_cols = [c for c in filtered.columns if c.startswith("wt1_")]
-    sample_preview = filtered[["display_time", *wt1_cols[:4]]].head(12).to_dict(orient="records")
-
+    imu_figures = build_imu_plotly_figures(imu_filtered)
+    
     saved_file = q.get("saved_file")
     saved_rows = q.get("saved_rows")
 
@@ -152,7 +155,7 @@ def index():
         min_ts=format_dt_local(prepared.min_ts),
         max_ts=format_dt_local(prepared.max_ts),
         rows=len(filtered),
-        sample_preview=sample_preview,
+        imu_figures=imu_figures,
         saved_file=saved_file,
         saved_rows=saved_rows,
     )
@@ -176,20 +179,53 @@ def save_clip() -> Response:
     time_start = map_pct_to_ts(start_pct, prepared.min_ts, prepared.max_ts)
     time_end = map_pct_to_ts(end_pct, prepared.min_ts, prepared.max_ts)
 
-    df = prepared.df
+    df = prepared.pen_df
+    imu_df = prepared.imu_df
     clip = df[(df["timestamp_unix"] >= time_start) & (df["timestamp_unix"] <= time_end)].copy()
+    imu_clip = imu_df[(imu_df["timestamp_unix_aligned"] >= time_start) & (imu_df["timestamp_unix_aligned"] <= time_end)].copy()
+    hand_clip = filter_hand_data_by_pct(hand_prepared, start_pct, end_pct)
     if smooth_enabled:
         clip = smooth_trajectory(clip, smooth_window)
+        hand_clip = smooth_right_hand_trajectory(hand_clip, smooth_window)
 
     exports_dir = ROOT / "exports"
     exports_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"clip_{_filename_token(start_pct)}_{_filename_token(end_pct)}_{stamp}.jsonl"
-    out_path = exports_dir / filename
+    pen_filename = "pen_data.jsonl"
+    imu_filename = "imu.txt"
+    hand_filename = "pred3d_world.jsonl"
 
-    records = clip.to_dict(orient="records")
-    with open(out_path, "w", encoding="utf-8") as f:
-        for rec in records:
+    pen_path = exports_dir / pen_filename
+    imu_path = exports_dir / imu_filename
+    hand_path = exports_dir / hand_filename
+
+    pen_records = clip.to_dict(orient="records")
+    with open(pen_path, "w", encoding="utf-8") as f:
+        for rec in pen_records:
+            clean = {str(k): _jsonable(v) for k, v in rec.items()}
+            f.write(json.dumps(clean, ensure_ascii=False) + "\n")
+
+    imu_save_cols = [
+        c
+        for c in [
+            "display_time",
+            "device_type",
+            "角度X(°)",
+            "角度Y(°)",
+            "角度Z(°)",
+            "加速度X(g)",
+            "加速度Y(g)",
+            "加速度Z(g)",
+            "accel_magnitude(g)",
+            "timestamp_unix_aligned",
+            "time_offset_seconds",
+        ]
+        if c in imu_clip.columns
+    ]
+    imu_clip.loc[:, imu_save_cols].to_csv(imu_path, sep="\t", index=False)
+
+    hand_records = hand_clip.to_dict(orient="records")
+    with open(hand_path, "w", encoding="utf-8") as f:
+        for rec in hand_records:
             clean = {str(k): _jsonable(v) for k, v in rec.items()}
             f.write(json.dumps(clean, ensure_ascii=False) + "\n")
 
@@ -200,8 +236,8 @@ def save_clip() -> Response:
         "pen_length": pen_length,
         "contact_threshold": contact_threshold,
         "smooth_window": smooth_window,
-        "saved_file": filename,
-        "saved_rows": len(records),
+        "saved_file": f"{pen_filename}, {imu_filename}, {hand_filename}",
+        "saved_rows": len(pen_records),
     }
     if smooth_enabled:
         params["smooth"] = "on"
@@ -211,3 +247,4 @@ def save_clip() -> Response:
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
+

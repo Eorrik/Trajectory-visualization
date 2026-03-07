@@ -82,31 +82,15 @@
       <div class="panel"><div id="plotly3d" style="width:100%;height:760px;"></div></div>
       <div class="panel"><div id="handPlotly3d" style="width:100%;height:760px;"></div></div>
 
-      <div class="panel">
-        <h3>WT1 插值数据预览（前 12 行）</h3>
-        {% if sample_preview %}
-        <table>
-          <thead>
-            <tr>
-              {% for key in sample_preview[0].keys() %}
-              <th>{{ key }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in sample_preview %}
-            <tr>
-              {% for value in row.values() %}
-              <td>{{ value }}</td>
-              {% endfor %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <p class="hint">当前过滤条件下没有可展示数据。</p>
-        {% endif %}
-      </div>
+      <div class="panel"><div id="imuWT1Angle" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT2Angle" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT3Angle" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT4Angle" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT1Accel" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT2Accel" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT3Accel" style="width:100%;height:350px;"></div></div>
+      <div class="panel"><div id="imuWT4Accel" style="width:100%;height:350px;"></div></div>
+      
     </div>
 
     <script>
@@ -121,8 +105,18 @@
 
       const fig = {{ plotly_figure | tojson }};
       const handFig = {{ hand_plotly_figure | tojson }};
+      const imuFigs = {{ imu_figures | tojson }};
+     
       Plotly.newPlot('plotly3d', fig.data, fig.layout, {responsive: true});
       Plotly.newPlot('handPlotly3d', handFig.data, handFig.layout, {responsive: true});
+      Plotly.newPlot('imuWT1Angle', imuFigs.WT1_angle.data, imuFigs.WT1_angle.layout, {responsive: true});
+      Plotly.newPlot('imuWT2Angle', imuFigs.WT2_angle.data, imuFigs.WT2_angle.layout, {responsive: true});
+      Plotly.newPlot('imuWT3Angle', imuFigs.WT3_angle.data, imuFigs.WT3_angle.layout, {responsive: true});
+      Plotly.newPlot('imuWT4Angle', imuFigs.WT4_angle.data, imuFigs.WT4_angle.layout, {responsive: true});
+      Plotly.newPlot('imuWT1Accel', imuFigs.WT1_accel.data, imuFigs.WT1_accel.layout, {responsive: true});
+      Plotly.newPlot('imuWT2Accel', imuFigs.WT2_accel.data, imuFigs.WT2_accel.layout, {responsive: true});
+      Plotly.newPlot('imuWT3Accel', imuFigs.WT3_accel.data, imuFigs.WT3_accel.layout, {responsive: true});
+      Plotly.newPlot('imuWT4Accel', imuFigs.WT4_accel.data, imuFigs.WT4_accel.layout, {responsive: true});
 
       function syncRanges() {
         let s = parseFloat(startRange.value);

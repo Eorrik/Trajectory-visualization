@@ -315,3 +315,112 @@ def build_hand_plotly_figure(hand_df: pd.DataFrame) -> dict[str, Any]:
     }
 
     return {"data": traces, "layout": layout}
+
+def _empty_imu_figure(title: str) -> dict[str, Any]:
+    return {
+        "data": [],
+        "layout": {
+            "title": title,
+            "height": 350,
+            "annotations": [
+                {
+                    "text": "当前时间窗无可用 IMU 数据",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                    "font": {"size": 14},
+                }
+            ],
+        },
+    }
+
+
+
+
+def _to_second_level_label(value: Any) -> str:
+    raw = str(value)
+    if "." in raw:
+        raw = raw.split(".", 1)[0]
+    parts = raw.split(":")
+
+    if len(parts) >= 3:
+        # 兼容 HH:MM:SS / MM:SS:mmm 两种格式，统一显示到秒级 MM:SS
+        if parts[-1].isdigit() and len(parts[-1]) == 3:
+            return f"{parts[-3]}:{parts[-2]}"
+        return f"{parts[-2]}:{parts[-1]}"
+    if len(parts) == 2:
+        return raw
+    return raw
+
+
+
+def _first_frame_labels_per_second(values: list[Any]) -> list[str]:
+    labels: list[str] = []
+    seen_second: set[str] = set()
+    for v in values:
+        sec = _to_second_level_label(v)
+        if sec in seen_second:
+            labels.append("")
+        else:
+            seen_second.add(sec)
+            labels.append(sec)
+    return labels
+
+def build_imu_plotly_figures(imu_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    figures: dict[str, dict[str, Any]] = {}
+    for wt in ["WT1", "WT2", "WT3", "WT4"]:
+        wt_df = imu_df[imu_df["device_type"] == wt].copy() if not imu_df.empty else pd.DataFrame()
+        angle_title = f"{wt} 角度变化图"
+        accel_title = f"{wt} 合加速度变化图"
+
+        if wt_df.empty:
+            figures[f"{wt}_angle"] = _empty_imu_figure(angle_title)
+            figures[f"{wt}_accel"] = _empty_imu_figure(accel_title)
+            continue
+
+        if "display_time_mmss_mmm" in wt_df.columns:
+            x_col = "display_time_mmss_mmm"
+        elif "display_time_mmss" in wt_df.columns:
+            x_col = "display_time_mmss"
+        else:
+            x_col = "display_time"
+        x_vals = wt_df[x_col].tolist()
+        x_tick_text = _first_frame_labels_per_second(x_vals)
+        figures[f"{wt}_angle"] = {
+            "data": [
+                {"type": "scatter", "mode": "lines", "name": "角度X", "x": x_vals, "y": wt_df["角度X(°)"].tolist()},
+                {"type": "scatter", "mode": "lines", "name": "角度Y", "x": x_vals, "y": wt_df["角度Y(°)"].tolist()},
+                {"type": "scatter", "mode": "lines", "name": "角度Z", "x": x_vals, "y": wt_df["角度Z(°)"].tolist()},
+            ],
+            "layout": {
+                "title": angle_title,
+                "height": 350,
+                "xaxis": {"title": {"text": "时间(MM:SS)", "standoff": 28}, "type": "category", "tickmode": "array", "tickvals": x_vals, "ticktext": x_tick_text, "tickangle": -35, "automargin": True},
+                "yaxis": {"title": "角度(°)"},
+                "margin": {"l": 50, "r": 20, "b": 95, "t": 50},
+            },
+        }
+
+        figures[f"{wt}_accel"] = {
+            "data": [
+                {
+                    "type": "scatter",
+                    "mode": "lines",
+                    "name": "合加速度",
+                    "x": x_vals,
+                    "y": wt_df["accel_magnitude(g)"].tolist(),
+                    "line": {"color": "#d62728", "width": 2.2},
+                }
+            ],
+            "layout": {
+                "title": accel_title,
+                "height": 350,
+                "xaxis": {"title": {"text": "时间(MM:SS)", "standoff": 28}, "type": "category", "tickmode": "array", "tickvals": x_vals, "ticktext": x_tick_text, "tickangle": -35, "automargin": True},
+                "yaxis": {"title": "合加速度(g)"},
+                "margin": {"l": 50, "r": 20, "b": 95, "t": 50},
+            },
+        }
+    return figures
+
